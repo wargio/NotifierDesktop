@@ -15,6 +15,9 @@ import javax.swing.JOptionPane;
 
 public class Main extends Application {
 
+    final static int SHORT_NOTIFICATION = 2500;
+    final static int LONG_NOTIFICATION = 5000;
+
     final static String appName = "Notifier";
     static String ip = null;
     static String hostname = null;
@@ -25,6 +28,7 @@ public class Main extends Application {
     static Boolean keepRunning = true;
     static HashMap<Integer, ClientInfo> clients = new HashMap<Integer, ClientInfo>();
     static int logging = 0;
+    public static Integer n_threads = 0;
 
     private final static Runnable notificationHandler = new Runnable() {
         @Override
@@ -52,19 +56,23 @@ public class Main extends Application {
                             cinfo = clients.get(data.getAccess());
                             if (cinfo != null && (data.getWho() != null || data.getMessage() != null)) {
                                 logger.log(cinfo.getHostname() + ": " + data.getWho() + " - " + data.getMessage(), Logger.Level.DEBUG);
-                                trayIcon.displayMessage(
+                                synchronized (n_threads) {
+                                    n_threads++;
+                                }
+                                Thread t = new Thread(new Notification(
                                         cinfo.getHostname() + ": " + data.getWho(),
-                                        data.getMessage(),
-                                        TrayIcon.MessageType.INFO
-                                );
+                                        data.getMessage(), LONG_NOTIFICATION));
+                                t.start();
+
                             } else if (cinfo != null && data.getWho() == null && data.getMessage() == null) {
                                 clients.remove(cinfo.getAccess());
                                 String message = cinfo.getHostname() + " is now disconnected.";
-                                trayIcon.displayMessage(
-                                        appName,
-                                        message,
-                                        TrayIcon.MessageType.WARNING
-                                );
+                                synchronized (n_threads) {
+                                    n_threads++;
+                                }
+                                Thread t = new Thread(new Notification(appName, message, SHORT_NOTIFICATION));
+                                t.start();
+
                                 logger.log(message, Logger.Level.WARNING);
                             } else {
                                 logger.log("Bad access for ip: " + ip, Logger.Level.ERROR);
@@ -77,12 +85,13 @@ public class Main extends Application {
                             }
                             clients.put(cinfo.getAccess(), cinfo);
                             out.writeObject(new Data("", hostname, cinfo.getAccess()));
+                            String message = data.getMessage() + " is now connected!";
+                            synchronized (n_threads) {
+                                n_threads++;
+                            }
+                            Thread t = new Thread(new Notification(appName, message, SHORT_NOTIFICATION));
+                            t.start();
 
-                            trayIcon.displayMessage(
-                                    appName,
-                                    data.getMessage() + " is now connected!",
-                                    TrayIcon.MessageType.WARNING
-                            );
                         } else {
                             logger.log("Bad data for ip: " + ip + " " + data, Logger.Level.ERROR);
                         }
